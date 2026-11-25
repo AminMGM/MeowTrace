@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Rust toolchain
+        run: rustup target add wasm32-unknown-unknown
+      - name: Rust unit tests
+        working-directory: core-rs
+        run: cargo test --release
+      - run: npm ci
+      - name: Build core (WASM)
+        run: npm run core
+      - name: Unit tests
+        run: npm test
+      - name: Typecheck & build
+        run: npm run build

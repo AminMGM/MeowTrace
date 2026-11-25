@@ -1,0 +1,71 @@
+# Dependencies
+node_modules/
+.pnp.*
+.yarn/cache
+.yarn/install-state.gz
+
+# Build output
+out/
+dist/
+build/icon.ico
+build/icon.png
+resources/icon.png
+src/renderer/src/assets/icon.png
+*.tsbuildinfo
+.vite/
+coverage/
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# ---------------------------------------------------------------------------
+# AI / agent tooling — nothing here belongs in the repository or the build
+# ---------------------------------------------------------------------------
+.freebuff/
+.claude/
+.claude*
+CLAUDE.md
+AGENTS.md
+.cursor/
+.cursorrules
+.windsurf/
+.windsurfrules
+.aider*
+.continue/
+.codeium/
+.tabnine/
+.gemini/
+.geminirules
+.github/copilot-instructions.md
+.roo/
+.kiro/
+.trae/
+.void/
+.zed/
+mcp.json
+*.mcp.json
+.ai/
+.llm/
+.prompt-history
+conversations/
+
+# MeowTrace
+core-rs/target/
+src/renderer/src/engine/core-wasm.ts
+src/renderer/src/assets/icon.png
+src/renderer/src/assets/mark.png
+e2e-out/
+graphify-out/
+
+# Source artwork (third-party signature) — kept local
+Assets/*.jpg

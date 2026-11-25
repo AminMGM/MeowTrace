@@ -1,0 +1,50 @@
+appId: com.aminmgm.meowtrace
+productName: MeowTrace
+copyright: Copyright © 2026 AminMGM
+
+directories:
+  buildResources: build
+  output: dist
+
+# Only the English Chromium locale — saves ~48 MB unpacked.
+electronLanguages:
+  - en-US
+
+files:
+  - out/**
+  - resources/**
+  - package.json
+  - '!**/*.map'
+
+fileAssociations:
+  - ext: [png, jpg, jpeg, webp, bmp, gif]
+    name: Image
+    role: Viewer
+    description: Open with MeowTrace
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+# NSIS + blockmap = electron-updater differential updates: only changed
+# blocks are downloaded, never the whole installer again.
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  differentialPackage: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: MeowTrace
+  uninstallDisplayName: MeowTrace
+
+publish:
+  provider: github
+  owner: AminMGM
+  repo: MeowTrace
+  releaseType: release

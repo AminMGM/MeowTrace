@@ -1,0 +1,53 @@
+{
+  "name": "meowtrace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MeowTrace — open-source bitmap to vector tracer (Vector Magic alternative) with a Rust/WASM engine",
+  "author": "AminMGM",
+  "license": "MIT",
+  "homepage": "https://github.com/AminMGM/MeowTrace",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AminMGM/MeowTrace.git"
+  },
+  "main": "./out/main/index.js",
+  "scripts": {
+    "core": "node scripts/build-core.mjs",
+    "core:test": "node scripts/build-core.mjs --test",
+    "icon": "node scripts/make-icon.mjs",
+    "predev": "npm run icon && node scripts/embed-wasm.mjs",
+    "dev": "electron-vite dev",
+    "start": "electron-vite preview",
+    "prebuild": "npm run icon && node scripts/embed-wasm.mjs",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "test": "node --import tsx --test \"src/**/*.test.ts\"",
+    "trace": "tsx scripts/trace-cli.mts",
+    "build": "npm run typecheck && electron-vite build",
+    "e2e": "node scripts/e2e.mjs",
+    "dist": "npm run build && electron-builder --win --publish never",
+    "release": "npm run build && electron-builder --win --publish always",
+    "pretest": "node scripts/embed-wasm.mjs"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.7",
+    "@types/react": "^19.3.1",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "electron": "^45.5.0",
+    "electron-builder": "^26.18.0",
+    "electron-vite": "^6.0.0",
+    "playwright": "^1.60.0",
+    "png-to-ico": "^3.0.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "sharp": "^0.35.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}
