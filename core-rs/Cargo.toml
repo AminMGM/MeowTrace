@@ -1,10 +1,10 @@
 [package]
 name = "meowtrace-core"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 authors = ["AminMGM"]
-description = "Raster-to-vector tracing engine: OKLab colour quantization, potrace-style Bezier fitting, stacked layers and centerline tracing. Zero dependencies, builds to WebAssembly."
+description = "Raster-to-vector tracing engine: OKLab colour quantization with anti-alias edge snapping, potrace-style Bezier fitting with corner restoration, stacked layers and centerline tracing. Zero dependencies, builds to WebAssembly."
 repository = "https://github.com/AminMGM/MeowTrace"
 keywords = ["vectorize", "trace", "svg", "potrace", "bitmap"]
 categories = ["graphics", "multimedia::images"]

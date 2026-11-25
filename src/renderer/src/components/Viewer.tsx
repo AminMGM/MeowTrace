@@ -95,6 +95,7 @@ export function Viewer(): JSX.Element {
   const [cam, setCam] = useState({ x: 0, y: 0, z: 1 })
   const camRef = useRef(cam)
   camRef.current = cam
+  const [viewW, setViewW] = useState(0)
   const [spaceDown, setSpaceDown] = useState(false)
   const [moving, setMoving] = useState<{ layerId: string; pathId: string; dx: number; dy: number } | null>(null)
   const [cursor, setCursor] = useState<Pt | null>(null)
@@ -137,7 +138,9 @@ export function Viewer(): JSX.Element {
   useEffect(() => {
     const el = wrap.current
     if (!el) return
+    setViewW(el.clientWidth)
     const ro = new ResizeObserver(() => {
+      setViewW(el.clientWidth)
       if (getState().source && camRef.current.z === 1 && camRef.current.x === 0) fit()
     })
     ro.observe(el)
@@ -313,7 +316,10 @@ export function Viewer(): JSX.Element {
   const showVector = view !== 'original' && view !== 'segments'
   const selLayer = selection && doc?.layers.find((l) => l.id === selection.layerId)
   const selPath = selLayer?.paths.find((p) => p.id === selection?.pathId)
-  const clip = view === 'split' ? `inset(0 0 0 ${split * 100}%)` : undefined
+  // The handle sits at a fraction of the viewer's width; the vector is panned
+  // and zoomed, so convert that screen position into image pixels for the clip.
+  const splitX = Math.min(W, Math.max(0, (split * viewW - cam.x) / cam.z))
+  const clip = view === 'split' ? `inset(0 0 0 ${splitX}px)` : undefined
   const cursorClass = spaceDown || tool === 'pan' ? 'grab' : segTool ? 'crosshair' : tool === 'node' ? 'node' : 'default'
 
   return (

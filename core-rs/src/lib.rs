@@ -64,6 +64,10 @@ pub struct Options {
     /// Output coordinate multiplier (e.g. when the source was downscaled).
     pub scale: f64,
     pub line_tolerance: f64,
+    /// Edge sharpening before quantization, 0..=3 (0 = off).
+    pub sharpen: f32,
+    /// Snap anti-aliased edge pixels to the colours they blend between.
+    pub snap_edges: bool,
 }
 
 impl Default for Options {
@@ -84,10 +88,12 @@ impl Default for Options {
             stacked: true,
             remove_bg: false,
             precision: 2,
-            merge: 0.06,
+            merge: 0.04,
             alpha_threshold: 128,
             scale: 1.0,
             line_tolerance: 1.0,
+            sharpen: 0.0,
+            snap_edges: true,
         }
     }
 }
@@ -128,6 +134,8 @@ impl Options {
             alpha_threshold: g(16, 128.0).clamp(1.0, 255.0) as u8,
             scale: { let s = g(17, 1.0); if s > 0.0 { s } else { 1.0 } },
             line_tolerance: g(18, d.line_tolerance).clamp(0.05, 20.0),
+            sharpen: g(19, 0.0).clamp(0.0, 3.0) as f32,
+            snap_edges: b(20, true),
         }
     }
 }
@@ -169,19 +177,24 @@ pub fn segment(rgba: &[u8], w: usize, h: usize, o: &Options, locked: &[[u8; 3]])
         2 => img = preprocess::bilateral(&img, 24.0),
         _ => {}
     }
-    let up = if o.upscale >= 2 && w * h <= 6_000_000 { 2 } else { 1 };
+    if o.sharpen > 0.0 {
+        img = preprocess::sharpen(&img, o.sharpen);
+    }
+    let up = if o.upscale >= 2 && w * h <= 4_000_000 { 2 } else { 1 };
     if up == 2 {
         img = preprocess::upscale2(&img);
     }
+    let snap = if o.snap_edges { up } else { 0 };
     let q = match o.mode {
         Mode::Bw | Mode::Centerline if locked.is_empty() && o.colors <= 2 => {
             quantize::binarize(&img, o.threshold, o.invert)
         }
         Mode::Gray => {
             preprocess::to_gray(&mut img);
-            quantize::quantize(&img, o.colors, o.merge, locked)
+            quantize::quantize(&img, o.colors, o.merge, locked, snap)
         }
-        _ => quantize::quantize(&img, o.colors, o.merge, locked),
+        Mode::Pixel => quantize::quantize(&img, o.colors, o.merge, locked, 0),
+        _ => quantize::quantize(&img, o.colors, o.merge, locked, snap),
     };
     let mut labels = q.labels;
     let (sw, sh) = (img.w, img.h);
@@ -194,13 +207,14 @@ pub fn segment(rgba: &[u8], w: usize, h: usize, o: &Options, locked: &[[u8; 3]])
     Segmentation { w: sw, h: sh, palette, labels, upscale: up as u8 }
 }
 
-fn potrace_params(o: &Options) -> Params {
+fn potrace_params(o: &Options, upscale: u8) -> Params {
     Params {
+        corner_bevel: if o.mode == Mode::Pixel { 0.0 } else { 4.0 * upscale.max(1) as f64 },
         turdsize: 0,
         turnpolicy: TurnPolicy::Minority,
         alphamax: if o.mode == Mode::Pixel { 0.0 } else { o.alphamax },
         opticurve: o.optimize && o.mode != Mode::Pixel,
-        opttolerance: o.opttolerance,
+        opttolerance: o.opttolerance * upscale.max(1) as f64,
     }
 }
 
@@ -295,7 +309,7 @@ pub fn vectorize(seg: &Segmentation, o: &Options) -> TraceResult {
     for (pos, &lab) in order.iter().enumerate() {
         rank[lab] = pos;
     }
-    let params = potrace_params(o);
+    let params = potrace_params(o, seg.upscale);
     let render = if o.mode == Mode::Pixel {
         Render::Pixels
     } else if o.curves {

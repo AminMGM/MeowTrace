@@ -2,8 +2,10 @@
 
 use crate::quantize::TRANSPARENT;
 
-/// Mode filter that only flips pixels which are nearly isolated, so thin
-/// details survive while anti-aliasing fringes disappear.
+/// Edge smoothing: re-labels stray pixels (at most one same-label neighbour
+/// out of eight) that sit inside a clearly dominant label. Pixels that
+/// continue a line — straight or diagonal — always have two same-label
+/// neighbours, so thin strokes, text and sharp tips survive any number of passes.
 pub fn majority_filter(labels: &mut [u8], w: usize, h: usize, passes: u32) {
     if w < 3 || h < 3 {
         return;
@@ -11,39 +13,25 @@ pub fn majority_filter(labels: &mut [u8], w: usize, h: usize, passes: u32) {
     for _ in 0..passes {
         let src = labels.to_vec();
         let mut changed = false;
-        for y in 0..h {
-            for x in 0..w {
-                let cur = src[y * w + x];
-                let mut nb = [0u8; 8];
-                let mut n = 0;
-                for dy in -1i32..=1 {
-                    for dx in -1i32..=1 {
-                        if dx == 0 && dy == 0 {
-                            continue;
-                        }
-                        let (xx, yy) = (x as i32 + dx, y as i32 + dy);
-                        if xx < 0 || yy < 0 || xx >= w as i32 || yy >= h as i32 {
-                            continue;
-                        }
-                        nb[n] = src[yy as usize * w + xx as usize];
-                        n += 1;
-                    }
-                }
-                let same = nb[..n].iter().filter(|&&l| l == cur).count();
-                if same > 2 {
+        for y in 1..h - 1 {
+            for x in 1..w - 1 {
+                let i = y * w + x;
+                let cur = src[i];
+                let nb = [src[i - w - 1], src[i - w], src[i - w + 1], src[i - 1], src[i + 1], src[i + w - 1], src[i + w], src[i + w + 1]];
+                if nb.iter().filter(|&&l| l == cur).count() > 1 {
                     continue;
                 }
                 let mut best = cur;
                 let mut best_count = 0;
-                for i in 0..n {
-                    let c = nb[..n].iter().filter(|&&l| l == nb[i]).count();
-                    if c > best_count {
-                        best_count = c;
-                        best = nb[i];
+                for &c in &nb {
+                    let n = nb.iter().filter(|&&l| l == c).count();
+                    if c != cur && n > best_count {
+                        best_count = n;
+                        best = c;
                     }
                 }
-                if best != cur && best_count >= 5.min(n) && best_count > same {
-                    labels[y * w + x] = best;
+                if best_count >= 5 {
+                    labels[i] = best;
                     changed = true;
                 }
             }
@@ -54,8 +42,9 @@ pub fn majority_filter(labels: &mut [u8], w: usize, h: usize, passes: u32) {
     }
 }
 
-/// Merges 4-connected regions smaller than `min_area` into the neighbouring
-/// label they share the longest border with.
+/// Merges regions smaller than `min_area` into the neighbouring label they
+/// share the longest border with. Regions are 8-connected so diagonal strokes
+/// (common in small text) count as one region instead of many specks.
 pub fn remove_small_regions(labels: &mut [u8], w: usize, h: usize, min_area: usize) {
     if min_area <= 1 || w == 0 || h == 0 {
         return;
@@ -96,6 +85,18 @@ pub fn remove_small_regions(labels: &mut [u8], w: usize, h: usize, min_area: usi
                 }
                 if y + 1 < h {
                     visit(p + w);
+                }
+                if y > 0 && x > 0 {
+                    visit(p - w - 1);
+                }
+                if y > 0 && x + 1 < w {
+                    visit(p - w + 1);
+                }
+                if y + 1 < h && x > 0 {
+                    visit(p + w - 1);
+                }
+                if y + 1 < h && x + 1 < w {
+                    visit(p + w + 1);
                 }
             }
             comps.push((start, order.len() as u32 - start));

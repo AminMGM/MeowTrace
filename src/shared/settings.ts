@@ -31,6 +31,10 @@ export interface TraceSettings {
   precision: number
   merge: number
   lineTolerance: number
+  /** Edge sharpening before tracing, 0 (off) … 2 */
+  sharpen: number
+  /** Snap anti-aliased edge pixels to the colours they blend between */
+  snapEdges: boolean
 }
 
 export const DEFAULT_SETTINGS: TraceSettings = {
@@ -53,8 +57,10 @@ export const DEFAULT_SETTINGS: TraceSettings = {
   stacked: true,
   removeBackground: false,
   precision: 2,
-  merge: 0.06,
-  lineTolerance: 1.0
+  merge: 0.04,
+  lineTolerance: 1.0,
+  sharpen: 0,
+  snapEdges: true
 }
 
 export const KIND_LABELS: Record<ImageKind, string> = {
@@ -71,17 +77,17 @@ export const KIND_LABELS: Record<ImageKind, string> = {
 export function presetFor(kind: Exclude<ImageKind, 'auto'>): Partial<TraceSettings> {
   switch (kind) {
     case 'photo':
-      return { mode: 'color', colors: 16, denoise: 2, smoothPasses: 1, cornerThreshold: 1.1, removeBackground: false }
+      return { mode: 'color', colors: 16, denoise: 2, sharpen: 0.4, snapEdges: true, smoothPasses: 1, cornerThreshold: 1.1, removeBackground: false }
     case 'logo':
-      return { mode: 'color', denoise: 0, smoothPasses: 0, cornerThreshold: 0.9 }
+      return { mode: 'color', denoise: 0, sharpen: 0, snapEdges: true, upscale: true, smoothPasses: 1, cornerThreshold: 0.9 }
     case 'logo-aa':
-      return { mode: 'color', denoise: 0, smoothPasses: 2, cornerThreshold: 1.0 }
+      return { mode: 'color', denoise: 0, sharpen: 0.6, snapEdges: true, upscale: true, smoothPasses: 1, cornerThreshold: 1.0 }
     case 'lineart':
-      return { mode: 'bw', colors: 2, denoise: 1, smoothPasses: 1, cornerThreshold: 1.0, removeBackground: true }
+      return { mode: 'bw', colors: 2, denoise: 1, sharpen: 0.5, upscale: true, smoothPasses: 1, cornerThreshold: 1.0, removeBackground: true }
     case 'centerline':
-      return { mode: 'centerline', colors: 2, denoise: 1, smoothPasses: 1, removeBackground: true }
+      return { mode: 'centerline', colors: 2, denoise: 1, sharpen: 0.5, smoothPasses: 1, removeBackground: true }
     case 'pixel':
-      return { mode: 'pixel', denoise: 0, smoothPasses: 0, speckle: 0, upscale: false }
+      return { mode: 'pixel', denoise: 0, sharpen: 0, snapEdges: false, smoothPasses: 0, speckle: 0, upscale: false }
   }
 }
 
@@ -95,14 +101,14 @@ export function resolveSettings(s: TraceSettings, analysis?: AnalysisLike | null
   if (s.kind !== 'auto') return s
   const kind = analysis?.kind ?? 'logo-aa'
   const preset = presetFor(kind)
-  const colors = kind === 'photo' ? s.colors || 16 : s.colors || analysis?.colors || 0
+  const colors = kind === 'photo' ? s.colors || 16 : s.colors
   return { ...s, ...preset, colors, kind: 'auto' }
 }
 
 const DETAIL: Record<Detail, { area: number; min: number; tol: number; line: number }> = {
   low: { area: 0.00016, min: 8, tol: 0.5, line: 1.6 },
-  medium: { area: 0.00004, min: 4, tol: 0.25, line: 1.0 },
-  high: { area: 0.00001, min: 2, tol: 0.12, line: 0.6 }
+  medium: { area: 0.00002, min: 2, tol: 0.25, line: 1.0 },
+  high: { area: 0.000005, min: 1, tol: 0.12, line: 0.6 }
 }
 
 export function autoSpeckle(detail: Detail, width: number, height: number): number {
@@ -140,7 +146,9 @@ export function toOptionArray(s: TraceSettings, width: number, height: number, s
     s.merge,
     128,
     scale,
-    s.lineTolerance * d.line
+    s.lineTolerance * d.line,
+    s.sharpen ?? 0,
+    s.snapEdges === false ? 0 : 1
   ])
 }
 
@@ -151,10 +159,6 @@ export function hexToRgb(hex: string): [number, number, number] | null {
   if (h.length === 3) h = h.split('').map((c) => c + c).join('')
   const n = parseInt(h, 16)
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
-}
-
-export function rgbToHex(r: number, g: number, b: number): string {
-  return '#' + [r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('')
 }
 
 /** Locked palette as RGBA bytes for the core (empty when not locked). */

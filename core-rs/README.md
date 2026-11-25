@@ -12,8 +12,8 @@ std::fs::write("out.svg", result.to_svg())?;
 
 Two stages, so a UI can edit the label map in between:
 
-- `segment(rgba, w, h, &opts, &palette) -> Segmentation`: denoise, upscale, OKLab k-means++ (automatic colour count, palette locking, Otsu B&W), majority smoothing, speckle merging.
-- `vectorize(&segmentation, &opts) -> TraceResult`: potrace-style Bezier outlines per colour layer (stacked or cut-out, holes kept), or centerline strokes.
+- `segment(rgba, w, h, &opts, &palette) -> Segmentation`: denoise, halo-free sharpening, upscale, OKLab k-means++ (automatic colour count, palette locking, Otsu B&W), anti-alias edge snapping, stray-pixel smoothing, speckle merging.
+- `vectorize(&segmentation, &opts) -> TraceResult`: potrace-style Bezier outlines with corner restoration per colour layer (stacked or cut-out, holes kept), or centerline strokes.
 
 Modes: `Color`, `Gray`, `Bw`, `Centerline`, `Pixel`.
 

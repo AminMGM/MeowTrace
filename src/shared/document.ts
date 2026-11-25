@@ -107,12 +107,6 @@ export function docStats(doc: VDoc): DocStats {
   return { layers: doc.layers.length, paths, nodes }
 }
 
-/** Splits each multi-subpath shape into separate paths (holes stay with nothing — use with care). */
-export function splitPathData(d: string): string[] {
-  const parts = d.split(/(?=[Mm])/).filter((s) => s.trim())
-  return parts
-}
-
 export function pathBox(d: string): { x0: number; y0: number; x1: number; y1: number } {
   return bbox(parsePath(d))
 }

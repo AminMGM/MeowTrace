@@ -411,7 +411,7 @@ fn smooth_keep_corners(pts: &[P], closed: bool, tol: f64, min_arm: f64) -> (Vec<
                 repl = (i0 + 1, i1, x);
             }
         }
-        if plan.last().map_or(true, |l| repl.0 >= l.1) {
+        if plan.last().is_none_or(|l| repl.0 >= l.1) {
             plan.push(repl);
         }
     }

@@ -49,11 +49,14 @@ pub struct Params {
     pub alphamax: f64,
     pub opticurve: bool,
     pub opttolerance: f64,
+    /// Restore corners that pixelation and anti-aliasing cut off (in bitmap
+    /// pixels: the longest bevel to undo; 0 = off).
+    pub corner_bevel: f64,
 }
 
 impl Default for Params {
     fn default() -> Self {
-        Params { turdsize: 2, turnpolicy: TurnPolicy::Minority, alphamax: 1.0, opticurve: true, opttolerance: 0.2 }
+        Params { turdsize: 2, turnpolicy: TurnPolicy::Minority, alphamax: 1.0, opticurve: true, opttolerance: 0.2, corner_bevel: 3.0 }
     }
 }
 
@@ -671,10 +674,89 @@ fn adjust_vertices(path: &mut Path) {
 }
 
 // ---------------------------------------------------------------------------
+// Stage 3b: corner restoration
+// ---------------------------------------------------------------------------
+
+/// Turns bevels back into corners. A rotated square or a star tip comes out
+/// of the polygon stage with its corner cut off by one to five short edges
+/// between two long, straight ones; potrace then rounds the whole area. When
+/// the long edges' extensions meet close to the short ones, the short edges
+/// are replaced by that meeting point, which the smoothing stage then keeps
+/// as a sharp corner.
+fn restore_corners(v: &mut Vec<P>, max_bevel: f64) {
+    if max_bevel <= 0.0 {
+        return;
+    }
+    let len = |a: P, b: P| ddist(a, b);
+    let mut guard = 0;
+    'outer: loop {
+        guard += 1;
+        let m = v.len();
+        if m < 5 || guard > 4 * m + 8 {
+            return;
+        }
+        for i in 0..m {
+            let prev = v[(i + m - 1) % m];
+            let a = v[i];
+            let l0 = len(prev, a);
+            // Grow a chain of short edges a = v[i] → … → v[j].
+            let mut chain = 0.0;
+            for span in 1..=5usize {
+                if span + 3 > m {
+                    break;
+                }
+                let j = (i + span) % m;
+                let e = len(v[(j + m - 1) % m], v[j]);
+                chain += e;
+                if chain > max_bevel {
+                    break;
+                }
+                let b = v[j];
+                let next = v[(j + 1) % m];
+                let l1 = len(b, next);
+                let long = (1.5 * chain).max(max_bevel * 0.75);
+                if l0 < long || l1 < long {
+                    continue;
+                }
+                // Total direction change between the two long edges.
+                let d0 = P::new((a.x - prev.x) / l0, (a.y - prev.y) / l0);
+                let d1 = P::new((next.x - b.x) / l1, (next.y - b.y) / l1);
+                let cross = d0.x * d1.y - d0.y * d1.x;
+                let dot = d0.x * d1.x + d0.y * d1.y;
+                let angle = cross.abs().atan2(dot).to_degrees();
+                if !(25.0..=165.0).contains(&angle) {
+                    continue;
+                }
+                // Meeting point of the two long edges' lines.
+                let tpar = ((b.x - a.x) * d1.y - (b.y - a.y) * d1.x) / cross;
+                if tpar <= 0.0 {
+                    continue;
+                }
+                let x = P::new(a.x + d0.x * tpar, a.y + d0.y * tpar);
+                let mid = interval(0.5, a, b);
+                if len(x, mid) > (2.0 * chain).max(1.0).min(max_bevel * 1.5) {
+                    continue;
+                }
+                // Replace v[i..=j] by x.
+                let mut out = Vec::with_capacity(m - span);
+                out.push(x);
+                out.extend((span + 1..m).map(|t| v[(i + t) % m]));
+                *v = out;
+                continue 'outer;
+            }
+        }
+        return;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Stage 4: smoothing and corner detection
 // ---------------------------------------------------------------------------
 
-fn smooth(curve: &mut Curve, alphamax: f64) {
+/// `sharp_turns`: also keep a corner where a long edge meets a much shorter
+/// one at a steep angle (the square ends of thin bars), which potrace's
+/// alpha alone treats as noise and rounds into a lens shape.
+fn smooth(curve: &mut Curve, alphamax: f64, sharp_turns: bool) {
     let m = curve.n;
     for i in 0..m {
         let j = (i + 1) % m;
@@ -691,6 +773,18 @@ fn smooth(curve: &mut Curve, alphamax: f64) {
         } else {
             4.0 / 3.0
         };
+        if sharp_turns && alpha < alphamax {
+            let vj = curve.vertex[j];
+            let (e1, e2) = (ddist(vi, vj), ddist(vj, vk));
+            let (short, long) = (e1.min(e2), e1.max(e2));
+            if short > 0.0 && long >= 8.0 && long >= 4.0 * short {
+                let cosang = iprod(vj, vi, vk) / (e1 * e2);
+                // Interior angle ≤ ~110° ⇒ direction change ≥ ~70°.
+                if cosang > -0.35 {
+                    alpha = 4.0 / 3.0;
+                }
+            }
+        }
         curve.alpha0[j] = alpha;
         if alpha >= alphamax {
             curve.is_curve[j] = false;
@@ -948,11 +1042,17 @@ pub fn process_path(path: &mut Path, params: &Params) {
     calc_lon(path);
     best_polygon(path);
     adjust_vertices(path);
+    if params.corner_bevel > 0.0 && params.alphamax < 1.3 {
+        let mut v = std::mem::take(&mut path.curve.vertex);
+        restore_corners(&mut v, params.corner_bevel);
+        path.curve = Curve::new(v.len());
+        path.curve.vertex = v;
+    }
     if !path.positive {
         path.curve.vertex.reverse();
     }
     path.polygon = path.curve.vertex.clone();
-    smooth(&mut path.curve, params.alphamax);
+    smooth(&mut path.curve, params.alphamax, params.corner_bevel > 0.0);
     if params.opticurve && path.curve.n > 1 {
         path.curve = opti_curve(&path.curve, params.opttolerance);
     }
@@ -1136,6 +1236,24 @@ mod tests {
         let compound = to_compound_paths(&paths, Render::Curves, &tf);
         assert_eq!(compound.len(), 1);
         assert_eq!(compound[0].matches('M').count(), 2);
+    }
+
+    #[test]
+    fn rotated_square_keeps_four_corners() {
+        let mut bm = Bitmap::new(120, 120);
+        let (c, s) = (20f64.to_radians().cos(), 20f64.to_radians().sin());
+        for y in 0..120 {
+            for x in 0..120 {
+                let (dx, dy) = (x as f64 + 0.5 - 60.0, y as f64 + 0.5 - 60.0);
+                if (dx * c + dy * s).abs() < 35.0 && (-dx * s + dy * c).abs() < 35.0 {
+                    bm.set(x, y);
+                }
+            }
+        }
+        let paths = trace(&bm, &Params::default());
+        assert_eq!(paths.len(), 1);
+        let corners = paths[0].curve.is_curve.iter().filter(|&&c| !c).count();
+        assert_eq!(corners, 4, "rotated square should have 4 sharp corners");
     }
 
     #[test]

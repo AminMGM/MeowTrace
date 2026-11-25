@@ -102,6 +102,39 @@ pub fn bilateral(img: &Rgb, sigma_range: f32) -> Rgb {
     out
 }
 
+/// Unsharp mask (3×3 Gaussian) clamped to each pixel's 3×3 min/max, so edges
+/// get steeper without the bright/dark halos a plain unsharp mask leaves —
+/// halos would otherwise trace as extra outline shapes. `amount` 0..=3.
+pub fn sharpen(img: &Rgb, amount: f32) -> Rgb {
+    let (w, h) = (img.w, img.h);
+    let mut out = img.clone();
+    if amount <= 0.0 || w < 3 || h < 3 {
+        return out;
+    }
+    const K: [f32; 9] = [1.0, 2.0, 1.0, 2.0, 4.0, 2.0, 1.0, 2.0, 1.0];
+    for y in 0..h {
+        for x in 0..w {
+            for c in 0..3 {
+                let (mut blur, mut lo, mut hi) = (0f32, 255f32, 0f32);
+                for dy in 0..3 {
+                    let yy = (y + dy).saturating_sub(1).min(h - 1);
+                    for dx in 0..3 {
+                        let xx = (x + dx).saturating_sub(1).min(w - 1);
+                        let v = img.px[(yy * w + xx) * 3 + c] as f32;
+                        blur += v * K[dy * 3 + dx];
+                        lo = lo.min(v);
+                        hi = hi.max(v);
+                    }
+                }
+                let v = img.px[(y * w + x) * 3 + c] as f32;
+                let s = v + amount * (v - blur / 16.0);
+                out.px[(y * w + x) * 3 + c] = s.clamp(lo, hi).round() as u8;
+            }
+        }
+    }
+    out
+}
+
 /// 2× bilinear upscale. Interpolated edges give the quantizer sub-pixel
 /// boundary positions, which makes small or low-res sources trace smoother.
 pub fn upscale2(img: &Rgb) -> Rgb {

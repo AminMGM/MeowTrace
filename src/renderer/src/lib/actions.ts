@@ -230,7 +230,18 @@ export function resetSettings(): void {
 
 // Keys the image-type presets control. Changing one while the type is
 // "Auto" first locks in the detected type so the edit is not overridden.
-const PRESET_KEYS: (keyof TraceSettings)[] = ['mode', 'colors', 'denoise', 'smoothPasses', 'cornerThreshold', 'removeBackground', 'speckle', 'upscale']
+const PRESET_KEYS: (keyof TraceSettings)[] = [
+  'mode',
+  'colors',
+  'denoise',
+  'sharpen',
+  'snapEdges',
+  'smoothPasses',
+  'cornerThreshold',
+  'removeBackground',
+  'speckle',
+  'upscale'
+]
 
 export function tweak(patch: Partial<TraceSettings>, immediate = false): void {
   const s = getState()

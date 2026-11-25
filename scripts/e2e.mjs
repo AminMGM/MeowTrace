@@ -57,6 +57,24 @@ try {
     await win.waitForTimeout(250)
     await win.screenshot({ path: `${out}/2-${name}.png` })
   }
+  // Split view: zoom in off-centre, then the clip edge must sit under the handle.
+  await win.keyboard.press('3')
+  const vb = await win.locator('.viewer').boundingBox()
+  await win.mouse.move(vb.x + vb.width * 0.3, vb.y + vb.height * 0.4)
+  for (let i = 0; i < 4; i++) await win.mouse.wheel(0, -240)
+  await win.waitForTimeout(250)
+  const gap = await win.evaluate(() => {
+    const handle = document.querySelector('.split-handle').getBoundingClientRect()
+    const svg = document.querySelector('svg.vector')
+    const r = svg.getBoundingClientRect()
+    const inset = parseFloat(/([\d.]+)px\)$/.exec(svg.style.clipPath)?.[1] ?? 'NaN')
+    const edge = r.left + inset * (r.width / svg.width.baseVal.value)
+    return Math.abs(edge - (handle.left + handle.width / 2))
+  })
+  log('split misalignment px', gap.toFixed(2))
+  if (!(gap < 2)) fail('split view clip does not line up with the handle')
+  await win.screenshot({ path: `${out}/2-split-zoomed.png` })
+  await win.keyboard.press('Control+0')
   await win.keyboard.press('1')
   await win.waitForTimeout(150)
 

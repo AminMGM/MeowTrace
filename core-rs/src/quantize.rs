@@ -156,7 +156,7 @@ fn kmeans_pp(pts: &Points, k: usize) -> Vec<[f32; 3]> {
     centers
 }
 
-fn lloyd(pts: &Points, centers: &mut Vec<[f32; 3]>, iters: usize) -> Vec<f32> {
+fn lloyd(pts: &Points, centers: &mut [[f32; 3]], iters: usize) -> Vec<f32> {
     let k = centers.len();
     let mut weight = vec![0f32; k];
     for _ in 0..iters {
@@ -194,7 +194,7 @@ fn reduce(centers: &mut Vec<[f32; 3]>, weight: &mut Vec<f32>, merge: f32, min_we
         for i in 0..centers.len() {
             for j in i + 1..centers.len() {
                 let d = dist2(&centers[i], &centers[j]);
-                if d < m2 && best.map_or(true, |b| d < b.2) {
+                if d < m2 && best.is_none_or(|b| d < b.2) {
                     best = Some((i, j, d));
                 }
             }
@@ -228,7 +228,9 @@ pub struct Quantized {
 }
 
 /// Quantizes to `k` colours (`k == 0` → automatic), or snaps to `locked`.
-pub fn quantize(img: &Rgb, k: u32, merge: f32, locked: &[[u8; 3]]) -> Quantized {
+/// `snap_edges`: 0 = off, otherwise the image's upscale factor (1 or 2) —
+/// the width of a blended edge band in pixels.
+pub fn quantize(img: &Rgb, k: u32, merge: f32, locked: &[[u8; 3]], snap_edges: usize) -> Quantized {
     let hist = histogram(img);
     let pts = points(&hist);
     let n_px = img.w * img.h;
@@ -249,7 +251,7 @@ pub fn quantize(img: &Rgb, k: u32, merge: f32, locked: &[[u8; 3]]) -> Quantized 
         let mut weight = lloyd(&pts, &mut c, 24);
         if auto {
             let total: f32 = weight.iter().sum();
-            reduce(&mut c, &mut weight, merge.max(0.01), total * 0.002);
+            reduce(&mut c, &mut weight, merge.max(0.01), total * 0.0008);
             lloyd(&pts, &mut c, 8);
             reduce(&mut c, &mut weight, merge.max(0.01), 0.0);
         } else {
@@ -273,25 +275,35 @@ pub fn quantize(img: &Rgb, k: u32, merge: f32, locked: &[[u8; 3]]) -> Quantized 
     for (i, &b) in pts.bins.iter().enumerate() {
         bin_label[b] = nearest(&centers, &pts.lab[i]) as u8;
     }
+    // Bins re-assigned by edge snapping; left out of the palette averages so
+    // blended pixels do not wash out the colours.
+    let mut snapped = vec![false; 32768];
+    if snap_edges > 0 && fixed_palette.is_none() && centers.len() > 2 {
+        snap_antialiasing(img, &hist, &pts, &mut bin_label, &mut snapped, centers.len(), snap_edges);
+    }
     let mut labels = vec![TRANSPARENT; n_px];
-    let mut sums = vec![[0u64; 4]; centers.len()];
+    // [pure pixels, all pixels] per label.
+    let mut sums = vec![[[0u64; 4]; 2]; centers.len()];
     for (i, p) in img.px.chunks_exact(3).enumerate() {
         if !img.opaque[i] {
             continue;
         }
-        let l = bin_label[bin_of(p[0], p[1], p[2])];
+        let b = bin_of(p[0], p[1], p[2]);
+        let l = bin_label[b];
         labels[i] = l;
-        let s = &mut sums[l as usize];
-        s[0] += p[0] as u64;
-        s[1] += p[1] as u64;
-        s[2] += p[2] as u64;
-        s[3] += 1;
+        for s in sums[l as usize].iter_mut().skip(snapped[b] as usize) {
+            s[0] += p[0] as u64;
+            s[1] += p[1] as u64;
+            s[2] += p[2] as u64;
+            s[3] += 1;
+        }
     }
     let palette = match fixed_palette {
         Some(p) => p,
         None => sums
             .iter()
-            .map(|s| {
+            .map(|both| {
+                let s = if both[0][3] > 0 { both[0] } else { both[1] };
                 if s[3] == 0 {
                     [0, 0, 0]
                 } else {
@@ -302,6 +314,127 @@ pub fn quantize(img: &Rgb, k: u32, merge: f32, locked: &[[u8; 3]]) -> Quantized 
             .collect(),
     };
     Quantized { palette, labels }
+}
+
+/// Removes anti-aliasing colours: clusters that are thin (few pixels with all
+/// four neighbours, up to `radius` away, in the same cluster) and whose colour lies on the line
+/// between two other clusters are blends produced by edge smoothing. Without
+/// this they trace as hairline outlines around every shape and eat into thin
+/// strokes such as text. Their pixels are re-assigned to whichever of the two
+/// end colours covers more of the pixel, which puts the edge where it really is.
+fn snap_antialiasing(img: &Rgb, hist: &Histogram, pts: &Points, bin_label: &mut [u8], snapped: &mut [bool], k: usize, radius: usize) {
+    let (w, h) = (img.w, img.h);
+    // Mean sRGB per cluster.
+    let mut acc = vec![[0f64; 4]; k];
+    for &b in &pts.bins {
+        let a = &mut acc[bin_label[b] as usize];
+        a[0] += hist.sum[b][0] as f64;
+        a[1] += hist.sum[b][1] as f64;
+        a[2] += hist.sum[b][2] as f64;
+        a[3] += hist.count[b] as f64;
+    }
+    let rgb: Vec<[f32; 3]> = acc
+        .iter()
+        .map(|a| if a[3] > 0.0 { [(a[0] / a[3]) as f32, (a[1] / a[3]) as f32, (a[2] / a[3]) as f32] } else { [0.0; 3] })
+        .collect();
+    // Share of each cluster's pixels that sit inside a solid area.
+    let label_at = |i: usize| -> u8 {
+        let p = &img.px[i * 3..i * 3 + 3];
+        bin_label[bin_of(p[0], p[1], p[2])]
+    };
+    let mut labels = vec![TRANSPARENT; w * h];
+    for i in 0..w * h {
+        if img.opaque[i] {
+            labels[i] = label_at(i);
+        }
+    }
+    let mut interior = vec![0u64; k];
+    let mut total = vec![0u64; k];
+    for y in 0..h {
+        for x in 0..w {
+            let l = labels[y * w + x];
+            if l == TRANSPARENT {
+                continue;
+            }
+            total[l as usize] += 1;
+            let same = |xx: usize, yy: usize| labels[yy * w + xx] == l;
+            let solid = (1..=radius).all(|r| {
+                (x < r || same(x - r, y)) && (x + r >= w || same(x + r, y)) && (y < r || same(x, y - r)) && (y + r >= h || same(x, y + r))
+            });
+            if solid {
+                interior[l as usize] += 1;
+            }
+        }
+    }
+    let frac: Vec<f32> = (0..k).map(|c| if total[c] == 0 { 1.0 } else { interior[c] as f32 / total[c] as f32 }).collect();
+
+    let mut order: Vec<usize> = (0..k).filter(|&c| total[c] > 0 && frac[c] < 0.1).collect();
+    order.sort_by(|&a, &b| frac[a].total_cmp(&frac[b]));
+    let mut removed = vec![false; k];
+    for &c in &order {
+        let kept: Vec<usize> = (0..k).filter(|&j| j != c && !removed[j] && total[j] > 0).collect();
+        if kept.len() < 2 {
+            break;
+        }
+        let mut between = false;
+        'pairs: for (ai, &a) in kept.iter().enumerate() {
+            for &b in &kept[ai + 1..] {
+                let (t, d, len) = seg_project(&rgb[c], &rgb[a], &rgb[b]);
+                if (0.06..=0.94).contains(&t) && d <= 8.0 + 0.08 * len {
+                    between = true;
+                    break 'pairs;
+                }
+            }
+        }
+        if between {
+            removed[c] = true;
+        }
+    }
+    if !removed.iter().any(|&r| r) {
+        return;
+    }
+    let kept: Vec<usize> = (0..k).filter(|&j| !removed[j] && total[j] > 0).collect();
+    for &b in &pts.bins {
+        if !removed[bin_label[b] as usize] {
+            continue;
+        }
+        let c = hist.sum[b];
+        let n = hist.count[b] as f32;
+        let p = [c[0] as f32 / n, c[1] as f32 / n, c[2] as f32 / n];
+        let mut best = (f32::MAX, kept[0]);
+        for (ai, &a) in kept.iter().enumerate() {
+            let da = dist_rgb(&p, &rgb[a]);
+            if da < best.0 {
+                best = (da, a);
+            }
+            for &bb in &kept[ai + 1..] {
+                let (t, d, _) = seg_project(&p, &rgb[a], &rgb[bb]);
+                if (0.0..=1.0).contains(&t) && d < best.0 {
+                    best = (d, if t < 0.5 { a } else { bb });
+                }
+            }
+        }
+        bin_label[b] = best.1 as u8;
+        snapped[b] = true;
+    }
+}
+
+#[inline]
+fn dist_rgb(a: &[f32; 3], b: &[f32; 3]) -> f32 {
+    ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt()
+}
+
+/// Projects `p` on the segment a→b: (t, distance to the line, segment length).
+fn seg_project(p: &[f32; 3], a: &[f32; 3], b: &[f32; 3]) -> (f32, f32, f32) {
+    let ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    let len2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2];
+    if len2 < 1.0 {
+        return (-1.0, f32::MAX, 0.0);
+    }
+    let ap = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
+    let t = (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / len2;
+    let q = [a[0] + t * ab[0], a[1] + t * ab[1], a[2] + t * ab[2]];
+    (t, dist_rgb(p, &q), len2.sqrt())
 }
 
 /// Otsu threshold over the luma of opaque pixels.
@@ -374,13 +507,13 @@ mod tests {
 
     #[test]
     fn auto_finds_two_colours() {
-        let q = quantize(&two_tone(), 0, 0.05, &[]);
+        let q = quantize(&two_tone(), 0, 0.05, &[], 1);
         assert_eq!(q.palette.len(), 2);
     }
 
     #[test]
     fn locked_palette_is_exact() {
-        let q = quantize(&two_tone(), 0, 0.05, &[[255, 0, 0], [0, 0, 0]]);
+        let q = quantize(&two_tone(), 0, 0.05, &[[255, 0, 0], [0, 0, 0]], 1);
         assert_eq!(q.palette, vec![[255, 0, 0], [0, 0, 0]]);
         assert_eq!(q.labels[0], 0);
         assert_eq!(q.labels[39], 1);

@@ -285,6 +285,22 @@ export function Sidebar(): JSX.Element {
             onChange={(v) => tweak({ smoothPasses: v })}
             hint={['off', 'strong']}
           />
+          <Slider
+            label="Sharpen"
+            min={0}
+            max={2}
+            step={0.1}
+            value={eff.sharpen}
+            format={(v) => (v === 0 ? 'Off' : v.toFixed(1))}
+            onChange={(v) => tweak({ sharpen: v })}
+            hint={['off', 'crisp']}
+          />
+          <Toggle
+            label="Snap anti-aliased edges"
+            checked={eff.snapEdges}
+            onChange={(v) => tweak({ snapEdges: v })}
+            hint="Removes outline slivers and keeps thin text strokes"
+          />
           <span className="field-label">Clean-up before tracing</span>
           <Segmented
             small
