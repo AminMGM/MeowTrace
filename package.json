@@ -1,6 +1,6 @@
 {
   "name": "meowtrace",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "MeowTrace — open-source bitmap to vector tracer (Vector Magic alternative) with a Rust/WASM engine",
   "author": "AminMGM",

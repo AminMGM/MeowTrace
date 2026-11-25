@@ -48,9 +48,22 @@ jobs:
       - name: Build
         run: npm run build
 
-      # --publish always uploads the NSIS installer, its .blockmap and
-      # latest.yml — what electron-updater needs for differential updates.
-      - name: Package and publish
-        run: npx electron-builder --win --publish always
+      - name: Package
+        run: npx electron-builder --win --publish never
+
+      # One release holding the installer, its .blockmap and latest.yml — what
+      # electron-updater needs for differential updates. electron-builder's
+      # parallel uploads can race and create duplicate releases, so publishing
+      # happens here in a single step (stale releases for the tag are removed).
+      - name: Publish release
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          gh api "repos/${GITHUB_REPOSITORY}/releases" --paginate \
+            --jq ".[] | select(.tag_name == \"$TAG\") | .id" |
+            while read -r id; do gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/$id"; done
+          gh release create "$TAG" dist/MeowTrace-Setup-*.exe dist/MeowTrace-Setup-*.exe.blockmap dist/latest.yml \
+            --title "MeowTrace ${TAG#v}" \
+            --notes "Download **MeowTrace-Setup-${TAG#v}.exe** below. Installed copies update themselves with small differential downloads."
