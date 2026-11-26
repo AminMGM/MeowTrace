@@ -15,6 +15,19 @@ files:
   - resources/**
   - package.json
   - '!**/*.map'
+  # onnxruntime-web: only the Node build and its single CPU wasm are used
+  # (by the anime worker); the other ~130 MB of browser variants are dropped.
+  - '!node_modules/onnxruntime-web/{lib,docs}/**'
+  - '!node_modules/onnxruntime-web/dist/**'
+  - node_modules/onnxruntime-web/dist/ort.node.min.js
+  - node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs
+  - node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm
+
+# Worker threads and the wasm runtime load files by path, so keep them out of the asar.
+asarUnpack:
+  - out/main/chunks/anime-worker-*.js
+  - node_modules/onnxruntime-web/**
+  - node_modules/onnxruntime-common/**
 
 fileAssociations:
   - ext: [png, jpg, jpeg, webp, bmp, gif]

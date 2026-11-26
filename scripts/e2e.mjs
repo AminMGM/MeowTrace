@@ -192,6 +192,56 @@ try {
   await win.evaluate(() => window.__meow.store.setState({ page: 'trace', showSettings: true }))
   await win.waitForTimeout(400)
   await win.screenshot({ path: `${out}/5-settings.png` })
+  await win.evaluate(() => window.__meow.store.setState({ showSettings: false }))
+
+  // Turn into anime: needs the models locally (MEOW_ANIME_MODELS=<folder>), so
+  // the test never downloads them. Without it only the dialog is checked.
+  await win.locator('.anime-btn').click()
+  await win.waitForSelector('.anime-card', { timeout: 5000 })
+  const cards = await win.locator('.anime-card').count()
+  log('anime styles', cards)
+  if (cards !== 4) fail('anime dialog should list 4 styles')
+  await win.screenshot({ path: `${out}/6-anime.png` })
+  if (process.env.MEOW_ANIME_MODELS) {
+    const t0 = Date.now()
+    await win.locator('.anime-card', { hasText: 'Hayao' }).locator('button.primary').click()
+    await win.waitForFunction(() => window.__meow.store.getState().source?.name.includes('(Hayao)'), null, { timeout: 120000 })
+    await idle()
+    const res = await win.evaluate(() => {
+      const s = window.__meow.store.getState()
+      return { name: s.source.name, layers: s.doc?.layers.length ?? 0, back: !!s.animeOriginal }
+    })
+    log('anime', JSON.stringify(res), `${((Date.now() - t0) / 1000).toFixed(1)} s`)
+    if (res.layers < 2 || !res.back) fail('anime conversion did not produce a traced image')
+    await win.screenshot({ path: `${out}/6-anime-result.png` })
+    await win.evaluate(() => window.__meow.store.setState({ view: 'original' }))
+    await win.waitForTimeout(300)
+    await win.screenshot({ path: `${out}/6-anime-original-view.png` })
+    await win.evaluate(() => window.__meow.store.setState({ view: 'vector' }))
+    // Switching style starts again from the original (no stacking), and the
+    // fixed-size Face Paint model keeps the image's aspect ratio.
+    const before = await win.evaluate(() => {
+      const s = window.__meow.store.getState().source
+      return { w: s.width, h: s.height }
+    })
+    await win.locator('.anime-btn').click()
+    await win.locator('.anime-card', { hasText: 'Face Paint' }).locator('button.primary').click()
+    await win.waitForFunction(() => window.__meow.store.getState().source?.name.includes('(Face Paint)'), null, { timeout: 120000 })
+    await idle()
+    const fp = await win.evaluate(() => {
+      const s = window.__meow.store.getState()
+      return { name: s.source.name, w: s.source.width, h: s.source.height, original: s.animeOriginal?.name }
+    })
+    log('anime face paint', JSON.stringify(fp))
+    if (fp.name.includes('(Hayao)') || fp.w !== before.w || fp.h !== before.h || fp.original?.includes('(')) fail('switching anime styles should start from the original')
+    await win.screenshot({ path: `${out}/6-anime-facepaint.png` })
+    await win.locator('.anime-row button.ghost').click()
+    await win.waitForFunction(() => !window.__meow.store.getState().source?.name.includes('(Hayao)'), null, { timeout: 30000 })
+    await idle()
+    log('back to original ok')
+  } else {
+    await win.keyboard.press('Escape')
+  }
 } catch (e) {
   fail(e.stack ?? String(e))
   await win.screenshot({ path: `${out}/error.png` }).catch(() => {})

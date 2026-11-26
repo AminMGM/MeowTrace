@@ -32,7 +32,12 @@ const api: MeowApi = {
   onUpdaterStatus: (cb) => subscribe('updater:status', cb),
   takePendingFiles: () => ipcRenderer.invoke('app:takePendingFiles'),
   onOpenFiles: (cb) => subscribe('app:openFiles', cb),
-  onMenu: (cb) => subscribe('app:menu', cb)
+  onMenu: (cb) => subscribe('app:menu', cb),
+  animeStatus: () => ipcRenderer.invoke('anime:status'),
+  animeDownload: (id) => ipcRenderer.invoke('anime:download', id),
+  animeDelete: (id) => ipcRenderer.invoke('anime:delete', id),
+  animeRun: (id, rgba, w, h) => ipcRenderer.invoke('anime:run', id, rgba, w, h),
+  onAnimeProgress: (cb) => subscribe('anime:progress', cb)
 }
 
 contextBridge.exposeInMainWorld('meow', api)

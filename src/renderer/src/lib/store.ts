@@ -4,6 +4,7 @@ import type { Analysis, Segmentation } from '@shared/engine'
 import type { VDoc } from '@shared/document'
 import { DEFAULT_SETTINGS } from '@shared/settings'
 import type { TraceSettings } from '@shared/settings'
+import type { AnimeStyleId } from '@shared/anime'
 import type { SourceImage } from './image'
 import { DEFAULT_EXPORT } from './exporting'
 import type { ExportSettings } from './exporting'
@@ -53,6 +54,9 @@ export interface State {
   exportSettings: ExportSettings
   toasts: Toast[]
   showSettings: boolean
+  showAnime: boolean
+  /** The image an anime conversion replaced, for "Back to original". */
+  animeOriginal: { blob: Blob; name: string; path?: string; style: AnimeStyleId } | null
   zoomCommand: { kind: 'fit' | 'actual' | 'in' | 'out'; n: number } | null
 }
 
@@ -99,6 +103,8 @@ let state: State = {
   exportSettings: savedExport,
   toasts: [],
   showSettings: false,
+  showAnime: false,
+  animeOriginal: null,
   zoomCommand: null
 }
 

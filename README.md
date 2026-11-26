@@ -37,6 +37,7 @@ Offline, no account, MIT licensed.</p>
 | **Anti-alias edge snapping**: no outline slivers, thin text kept | – | ✓ |
 | **Corner restoration**: sharp tips on stars, triangles, rotated boxes | – | ✓ |
 | **Halo-free sharpening** for blurry or upscaled sources | – | ✓ |
+| **Turn into anime**: 4 AI styles run on your PC, then traced | – | ✓ |
 | **Centerline tracing** (single strokes, no doubled outlines) | – | ✓ |
 | **Pixel-art mode** (exact squares) | – | ✓ |
 | **Brand-palette locking** (snap to exact hex values) | – | ✓ |
@@ -79,6 +80,19 @@ Download `MeowTrace-Setup-x.y.z.exe` from [Releases](https://github.com/AminMGM/
 | Centerline | Single-stroke paths for plotters, cutters and engravers |
 | Pixel art | Every pixel becomes an exact square |
 
+## Turn into anime
+
+Click **Turn into anime** under *Image type*. Pick a style and it repaints the image with an AI model on your computer; the result is then traced like any other image. **Original** brings the untouched image back.
+
+| Style | Look | Licence of the model |
+| --- | --- | --- |
+| Hayao | Soft watercolour skies, warm hand-painted scenery | [AnimeGANv2](https://github.com/TachibanaYoshino/AnimeGANv2), non-commercial only |
+| Shinkai | Crisp light, vivid blues, cinematic contrast | [AnimeGANv2](https://github.com/TachibanaYoshino/AnimeGANv2), non-commercial only |
+| Paprika | Bold saturated colour, graphic shading | [AnimeGANv2](https://github.com/TachibanaYoshino/AnimeGANv2), non-commercial only |
+| Face Paint | Portrait style; best on faces | MIT ([animegan2-pytorch](https://github.com/bryandlee/animegan2-pytorch)) |
+
+The models are not part of MeowTrace. Each one (about 8.6 MB) is downloaded from Hugging Face the first time you use it, checked against a SHA-256 hash, and kept in `%APPDATA%\MeowTrace\models`. After that everything runs offline. A conversion takes roughly 3–10 seconds on the CPU. The licence is shown on each style before you download it: the three AnimeGANv2 styles may only be used for personal, non-commercial work.
+
 ## Tips for the best trace
 
 | Problem | Try this |
@@ -107,6 +121,8 @@ The tracing engine is a dependency-free **Rust** crate ([`core-rs`](core-rs)) co
    The result is a label map that you can edit by hand.
 3. **Vectorize.** Each colour becomes a layer. Outlines are fitted with a Rust implementation of the potrace algorithm: optimal polygon, vertex adjustment, **corner restoration**, corner detection, then Bezier optimisation. Corner restoration replaces bevelled corners with the true meeting point of the two edges. In stacked mode the bottom layer covers the whole image and every other layer extends a couple of pixels underneath its neighbours, so there are no gaps and no colour rims where shapes meet. Holes stay attached to their shapes.
 4. **Centerline.** The pipeline runs Zhang–Suen thinning, builds a skeleton graph with merged junctions, prunes spurs, rebuilds corners, then smooths the Bezier strokes. Stroke widths are measured from a distance transform.
+
+**Turn into anime** runs AnimeGANv2-family ONNX models with [onnxruntime-web](https://onnxruntime.ai/) (its CPU WebAssembly build) in a worker thread of the main process.
 
 The Electron + React app (TypeScript) handles the editor and the Adobe hand-off. It also contains the exporters (SVG/EPS/PDF/AI/DXF/PSD/PNG), all written from scratch with no dependencies.
 

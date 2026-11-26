@@ -1,5 +1,7 @@
 // IPC contract between the renderer and the main process.
 
+import type { AnimeModelStatus, AnimeProgress, AnimeStyleId } from './anime'
+
 export interface AppInfo {
   version: string
   platform: string
@@ -74,6 +76,12 @@ export interface MeowApi {
   takePendingFiles(): Promise<string[]>
   onOpenFiles(cb: (paths: string[]) => void): () => void
   onMenu(cb: (command: string) => void): () => void
+  animeStatus(): Promise<AnimeModelStatus[]>
+  animeDownload(id: AnimeStyleId): Promise<void>
+  animeDelete(id: AnimeStyleId): Promise<void>
+  /** RGBA in, RGBA out, at the model's working size. */
+  animeRun(id: AnimeStyleId, rgba: Uint8Array, width: number, height: number): Promise<Uint8Array>
+  onAnimeProgress(cb: (p: AnimeProgress) => void): () => void
 }
 
 export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'avif', 'ico']

@@ -1,6 +1,6 @@
 {
   "name": "meowtrace",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "private": true,
   "description": "MeowTrace — open-source bitmap to vector tracer (Vector Magic alternative) with a Rust/WASM engine",
   "author": "AminMGM",
@@ -31,7 +31,8 @@
     "pretest": "node scripts/embed-wasm.mjs"
   },
   "dependencies": {
-    "electron-updater": "^6.8.11"
+    "electron-updater": "^6.8.11",
+    "onnxruntime-web": "^1.31.1"
   },
   "devDependencies": {
     "@types/node": "^26.6.7",

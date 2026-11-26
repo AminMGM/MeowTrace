@@ -5,7 +5,8 @@ import { KIND_LABELS, autoSpeckle, presetFor, resolveSettings } from '@shared/se
 import type { Detail, ImageKind, TraceMode, TraceSettings } from '@shared/settings'
 import { resetSettings, retrace, tweak, updateSettings } from '../lib/actions'
 import { paletteHex } from '../lib/labels'
-import { getState, toast, useStore } from '../lib/store'
+import { backToOriginal } from '../lib/anime'
+import { getState, setState, toast, useStore } from '../lib/store'
 import { Icon } from './Icon'
 import { Section, Segmented, Slider, Toggle } from './ui'
 
@@ -36,6 +37,7 @@ export function Sidebar(): JSX.Element {
   const settings = useStore((s) => s.settings)
   const analysis = useStore((s) => s.analysis)
   const source = useStore((s) => s.source)
+  const animeOriginal = useStore((s) => s.animeOriginal)
   const seg = useStore((s) => s.seg)
   const timings = useStore((s) => s.timings)
   const [presets, setPresets] = useState<Preset[]>(loadPresets)
@@ -109,6 +111,16 @@ export function Sidebar(): JSX.Element {
                 <span className="kind-blurb">{k.blurb}</span>
               </button>
             ))}
+          </div>
+          <div className="anime-row">
+            <button className="btn anime-btn" disabled={!source} onClick={() => setState({ showAnime: true })} title="Repaint the image in an anime style with a local AI model, then trace it">
+              <Icon name="sparkle" size={15} /> Turn into anime
+            </button>
+            {animeOriginal && (
+              <button className="btn ghost small" onClick={() => void backToOriginal()} title="Undo the anime conversion">
+                <Icon name="undo" size={14} /> Original
+              </button>
+            )}
           </div>
         </Section>
 

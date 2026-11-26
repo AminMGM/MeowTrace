@@ -1509,3 +1509,108 @@ kbd {
     padding: 5px 8px;
   }
 }
+
+/* Turn into anime */
+.anime-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.btn.anime-btn {
+  flex: 1;
+  justify-content: center;
+  background: linear-gradient(120deg, rgba(255, 113, 82, 0.22), rgba(186, 104, 255, 0.22));
+  border-color: rgba(255, 140, 190, 0.35);
+}
+.btn.anime-btn:hover:not(:disabled) {
+  background: linear-gradient(120deg, rgba(255, 113, 82, 0.34), rgba(186, 104, 255, 0.34));
+}
+.modal.anime-modal {
+  width: min(640px, calc(100vw - 40px));
+}
+.anime-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #ff7152, #ba68ff);
+  color: #fff;
+}
+.anime-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 10px 0 12px;
+}
+.anime-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+}
+.anime-card.on {
+  border-color: var(--accent-2);
+  background: var(--accent-soft);
+}
+.anime-card .muted {
+  min-height: 32px;
+}
+.anime-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.licence {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.licence.ok {
+  background: rgba(74, 222, 128, 0.16);
+  color: #86efac;
+}
+.licence.nc {
+  background: rgba(251, 191, 36, 0.16);
+  color: #fcd34d;
+}
+.anime-progress {
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+.anime-progress span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #ff7152, #ba68ff);
+  transition: width 0.15s;
+}
+.link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--muted);
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.link:hover {
+  color: var(--text, #fff);
+}
+.anime-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.anime-footer .muted {
+  flex: 1;
+}

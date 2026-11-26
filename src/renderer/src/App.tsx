@@ -6,6 +6,7 @@ import { getState, setState, toast, useStore } from './lib/store'
 import type { Tool, ViewMode } from './lib/store'
 import { engine } from './engine/pool'
 import { BatchView } from './components/BatchView'
+import { AnimeDialog } from './components/AnimeDialog'
 import { SettingsDialog, TitleBar, Toasts } from './components/Chrome'
 import { RightPanel } from './components/RightPanel'
 import { Sidebar } from './components/Sidebar'
@@ -167,6 +168,7 @@ export function App(): JSX.Element {
         </div>
       )}
       <SettingsDialog />
+      <AnimeDialog />
       <Toasts />
     </div>
   )

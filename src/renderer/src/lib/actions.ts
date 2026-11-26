@@ -55,7 +55,7 @@ export function commitDoc(doc: VDoc): void {
   setState({ doc })
 }
 
-function errorText(e: unknown): string {
+export function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
 
@@ -134,7 +134,7 @@ export async function openImage(bytes: Uint8Array | Blob, name: string, path?: s
     const old = getState().source
     const src = await decodeImage(bytes, name, path)
     if (old) URL.revokeObjectURL(old.url)
-    setState({ source: src, seg: null, doc: null, past: [], future: [], selection: null, analysis: null, segEdited: false })
+    setState({ source: src, seg: null, doc: null, past: [], future: [], selection: null, analysis: null, segEdited: false, animeOriginal: null })
     const analysis = await engine.analyze(src.rgba, src.pw, src.ph)
     setState({ analysis, zoomCommand: { kind: 'fit', n: Date.now() } })
     if (src.scale > 1.001) toast(`Large image: traced at ${src.pw}×${src.ph}, output keeps the original ${src.width}×${src.height} size.`)

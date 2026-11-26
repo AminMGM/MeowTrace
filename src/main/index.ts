@@ -2,6 +2,7 @@ import { BrowserWindow, Menu, app, ipcMain, shell } from 'electron'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { IMAGE_EXTENSIONS } from '../shared/api'
+import { registerAnimeIpc } from './anime'
 import { applyBridge, registerIpc } from './ipc'
 import { loadSettings } from './settings'
 import { initUpdater } from './updater'
@@ -95,6 +96,7 @@ if (!app.requestSingleInstanceLock()) {
     app.setAppUserModelId('com.aminmgm.meowtrace')
     Menu.setApplicationMenu(null)
     registerIpc()
+    registerAnimeIpc()
     // The renderer asks for files passed on the command line once it is listening.
     ipcMain.handle('app:takePendingFiles', () => {
       rendererReady = true
