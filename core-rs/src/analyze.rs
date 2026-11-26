@@ -11,6 +11,8 @@ pub struct Analysis {
     pub gray: bool,
     pub transparent: bool,
     pub coverage: f32,
+    /// Share of pixels inside flat (near-uniform) areas.
+    pub flat: f32,
 }
 
 /// Opaque pixels whose 3×3 neighbourhood is nearly uniform. Colour statistics
@@ -103,5 +105,5 @@ pub fn analyze(img: &Rgb) -> Analysis {
     } else {
         ("photo", 0)
     };
-    Analysis { kind, colors, gray, transparent, coverage }
+    Analysis { kind, colors, gray, transparent, coverage, flat: flat_share }
 }

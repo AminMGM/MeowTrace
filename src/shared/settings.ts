@@ -77,15 +77,15 @@ export const KIND_LABELS: Record<ImageKind, string> = {
 export function presetFor(kind: Exclude<ImageKind, 'auto'>): Partial<TraceSettings> {
   switch (kind) {
     case 'photo':
-      return { mode: 'color', colors: 16, denoise: 2, sharpen: 0.4, snapEdges: true, smoothPasses: 1, cornerThreshold: 1.1, removeBackground: false }
+      return { mode: 'color', colors: 16, denoise: 2, sharpen: 0, snapEdges: true, smoothPasses: 1, cornerThreshold: 1.1, removeBackground: false }
     case 'logo':
       return { mode: 'color', denoise: 0, sharpen: 0, snapEdges: true, upscale: true, smoothPasses: 1, cornerThreshold: 0.9 }
     case 'logo-aa':
-      return { mode: 'color', denoise: 0, sharpen: 0.6, snapEdges: true, upscale: true, smoothPasses: 1, cornerThreshold: 1.0 }
+      return { mode: 'color', denoise: 0, sharpen: 0, snapEdges: true, upscale: true, smoothPasses: 1, cornerThreshold: 0.9 }
     case 'lineart':
-      return { mode: 'bw', colors: 2, denoise: 1, sharpen: 0.5, upscale: true, smoothPasses: 1, cornerThreshold: 1.0, removeBackground: true }
+      return { mode: 'bw', colors: 2, denoise: 1, sharpen: 0, upscale: true, smoothPasses: 1, cornerThreshold: 1.0, removeBackground: true }
     case 'centerline':
-      return { mode: 'centerline', colors: 2, denoise: 1, sharpen: 0.5, smoothPasses: 1, removeBackground: true }
+      return { mode: 'centerline', colors: 2, denoise: 1, sharpen: 0, smoothPasses: 1, removeBackground: true }
     case 'pixel':
       return { mode: 'pixel', denoise: 0, sharpen: 0, snapEdges: false, smoothPasses: 0, speckle: 0, upscale: false }
   }

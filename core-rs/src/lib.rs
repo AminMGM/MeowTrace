@@ -248,6 +248,67 @@ fn layer_bitmap(seg: &Segmentation, pred: &dyn Fn(u8) -> bool) -> Option<(Bitmap
     Some((bm, minx, miny))
 }
 
+/// Stacked-mode bitmap for the layer at `pos`: its own pixels, grown by
+/// `grow` pixels underneath the layers drawn after it. That hides the
+/// anti-aliasing seam where two shapes meet. Growing only a little (instead
+/// of filling under every later layer) matters: a layer painted under a
+/// later shape shares that shape's outline, and because the two outlines are
+/// fitted separately its colour peeks out as a thin rim around the shape.
+fn stacked_bitmap(seg: &Segmentation, lab: usize, rank: &[usize], pos: usize, grow: usize) -> Option<(Bitmap, usize, usize)> {
+    let (w, h) = (seg.w, seg.h);
+    let (mut minx, mut miny, mut maxx, mut maxy) = (usize::MAX, usize::MAX, 0usize, 0usize);
+    for y in 0..h {
+        for (x, &l) in seg.labels[y * w..(y + 1) * w].iter().enumerate() {
+            if l as usize == lab {
+                minx = minx.min(x);
+                maxx = maxx.max(x);
+                miny = miny.min(y);
+                maxy = maxy.max(y);
+            }
+        }
+    }
+    if minx == usize::MAX {
+        return None;
+    }
+    let (x0, y0) = (minx.saturating_sub(grow), miny.saturating_sub(grow));
+    let (x1, y1) = ((maxx + grow).min(w - 1), (maxy + grow).min(h - 1));
+    let (bw, bh) = (x1 - x0 + 1, y1 - y0 + 1);
+    let later = |l: u8| l != TRANSPARENT && rank[l as usize] != usize::MAX && rank[l as usize] > pos;
+    let mut cur = vec![0u8; bw * bh];
+    for y in 0..bh {
+        for x in 0..bw {
+            cur[y * bw + x] = (seg.labels[(y + y0) * w + x + x0] as usize == lab) as u8;
+        }
+    }
+    let mut next = cur.clone();
+    for _ in 0..grow {
+        let mut changed = false;
+        for y in 0..bh {
+            for x in 0..bw {
+                let i = y * bw + x;
+                if cur[i] != 0 || !later(seg.labels[(y + y0) * w + x + x0]) {
+                    continue;
+                }
+                let touch = (x > 0 && cur[i - 1] != 0)
+                    || (x + 1 < bw && cur[i + 1] != 0)
+                    || (y > 0 && cur[i - bw] != 0)
+                    || (y + 1 < bh && cur[i + bw] != 0);
+                if touch {
+                    next[i] = 1;
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+        cur.copy_from_slice(&next);
+    }
+    let mut bm = Bitmap::new(bw as i32, bh as i32);
+    bm.data = cur;
+    Some((bm, x0, y0))
+}
+
 /// Stage 2: label map → vector layers (bottom layer first).
 pub fn vectorize(seg: &Segmentation, o: &Options) -> TraceResult {
     let n = seg.palette.len();
@@ -317,19 +378,17 @@ pub fn vectorize(seg: &Segmentation, o: &Options) -> TraceResult {
     } else {
         Render::Polygon
     };
+    let grow = seg.upscale.max(1) as usize + 1;
     for (pos, &lab) in order.iter().enumerate() {
-        let stacked = o.stacked;
-        let pred = |l: u8| -> bool {
-            if l == TRANSPARENT {
-                return false;
-            }
-            if stacked {
-                rank[l as usize] != usize::MAX && rank[l as usize] >= pos
-            } else {
-                l as usize == lab
-            }
+        let built = if !o.stacked {
+            layer_bitmap(seg, &|l: u8| l as usize == lab)
+        } else if pos == 0 {
+            // Bottom layer: everything that is traced, so nothing shows through.
+            layer_bitmap(seg, &|l: u8| l != TRANSPARENT && rank[l as usize] != usize::MAX)
+        } else {
+            stacked_bitmap(seg, lab, &rank, pos, grow)
         };
-        let Some((bm, ox, oy)) = layer_bitmap(seg, &pred) else { continue };
+        let Some((bm, ox, oy)) = built else { continue };
         let paths = potrace::trace(&bm, &params);
         let tf = Transform { ox: ox as f64, oy: oy as f64, scale: out_scale, precision: o.precision };
         let d = potrace::to_compound_paths(&paths, render, &tf);
@@ -419,8 +478,8 @@ impl TraceResult {
 impl analyze::Analysis {
     pub fn to_json(&self) -> String {
         format!(
-            "{{\"kind\":\"{}\",\"colors\":{},\"gray\":{},\"transparent\":{},\"coverage\":{:.4}}}",
-            self.kind, self.colors, self.gray, self.transparent, self.coverage
+            "{{\"kind\":\"{}\",\"colors\":{},\"gray\":{},\"transparent\":{},\"coverage\":{:.4},\"flat\":{:.4}}}",
+            self.kind, self.colors, self.gray, self.transparent, self.coverage, self.flat
         )
     }
 }
@@ -475,6 +534,29 @@ mod tests {
         let r = trace(&logo(w, h), w, h, &o, &[]);
         assert!(!r.layers.is_empty());
         assert!(r.layers[0].stroke);
+    }
+
+    #[test]
+    fn stacked_layers_do_not_reach_under_unrelated_shapes() {
+        // White background, a grey block on the left, a small black square on
+        // the right that never touches the grey. The grey layer must not be
+        // traced under the black square, or its edge would show as a rim.
+        let (w, h) = (60usize, 40usize);
+        let mut labels = vec![0u8; w * h];
+        for y in 5..35 {
+            for x in 3..30 {
+                labels[y * w + x] = 1;
+            }
+            if (15..25).contains(&y) {
+                for x in 42..52 {
+                    labels[y * w + x] = 2;
+                }
+            }
+        }
+        let seg = Segmentation { w, h, palette: vec![[255, 255, 255], [128, 128, 128], [0, 0, 0]], labels, upscale: 1 };
+        let r = vectorize(&seg, &Options::default());
+        let grey = r.layers.iter().find(|l| l.color == [128, 128, 128]).unwrap();
+        assert_eq!(grey.paths.len(), 1, "grey is one shape, nothing under the black square");
     }
 
     #[test]

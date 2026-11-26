@@ -51,7 +51,7 @@ const svg = toSvg(doc, {})
 await writeFile(output, svg)
 const paths = raw.layers.reduce((n, l) => n + l.p.length, 0)
 console.log(
-  `${info.width}×${info.height} · auto=${analysis.kind}/${analysis.colors} cov=${analysis.coverage.toFixed(3)} · mode=${resolved.mode} ` +
+  `${info.width}×${info.height} · auto=${analysis.kind}/${analysis.colors} cov=${analysis.coverage.toFixed(3)} flat=${analysis.flat.toFixed(3)} · mode=${resolved.mode} ` +
     `colors=${seg.palette.length / 4} layers=${raw.layers.length} paths=${paths} · segment ${(t1 - t0).toFixed(0)}ms vectorize ${(t2 - t1).toFixed(0)}ms · ` +
     `${(svg.length / 1024).toFixed(0)} KB → ${output}`
 )

@@ -734,7 +734,10 @@ fn restore_corners(v: &mut Vec<P>, max_bevel: f64) {
                 }
                 let x = P::new(a.x + d0.x * tpar, a.y + d0.y * tpar);
                 let mid = interval(0.5, a, b);
-                if len(x, mid) > (2.0 * chain).max(1.0).min(max_bevel * 1.5) {
+                // Never extend more than about one source pixel past the
+                // bevel: further out it is a real truncated tip (the inner V
+                // of an "M"), not anti-aliasing, and restoring it grows a spike.
+                if len(x, mid) > (2.0 * chain).max(1.0).min(max_bevel * 0.3) {
                     continue;
                 }
                 // Replace v[i..=j] by x.

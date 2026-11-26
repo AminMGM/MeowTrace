@@ -7,6 +7,8 @@ export interface Analysis {
   gray: boolean
   transparent: boolean
   coverage: number
+  /** share of pixels in flat areas */
+  flat: number
 }
 
 export interface Segmentation {

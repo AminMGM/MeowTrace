@@ -83,10 +83,10 @@ Download `MeowTrace-Setup-x.y.z.exe` from [Releases](https://github.com/AminMGM/
 
 | Problem | Try this |
 | --- | --- |
-| Thin coloured lines along the borders between shapes | Keep **Snap anti-aliased edges** on (Advanced). Use *Stacked shapes*. If the colour count is set by hand, lower it. |
+| Thin coloured lines along the borders between shapes | Keep **Snap anti-aliased edges** on (Advanced) and use *Stacked shapes*. For paintings and photos, try *Photo / painting*. |
 | Small text breaks up or loses dots | Turn on **Upscale 2× before tracing** (on by default for logos and line art). Set Detail to *High*. |
 | Corners come out rounded | Move **Corners** towards *Sharp*. Pick *Logo — sharp edges*. |
-| Soft or blurry source | Raise **Sharpen** (0.5–1.0). It steepens edges without adding halos. |
+| Soft or blurry source | Raise **Sharpen** (0.5–1.0). It steepens edges without adding halos. Leave it at 0 for crisp text and logos, where it makes edges wobble. |
 | Noisy scan or JPEG speckles | Use *Despeckle* or *Smooth* under Clean-up. Raise **Ignore specks smaller than**. |
 | Two similar colours merged | Drag **Merge similar colours** towards *more colours*, or set the colour count by hand. |
 
@@ -105,7 +105,7 @@ The tracing engine is a dependency-free **Rust** crate ([`core-rs`](core-rs)) co
    7. Speckle merging.
 
    The result is a label map that you can edit by hand.
-3. **Vectorize.** Each colour becomes a layer. Outlines are fitted with a Rust implementation of the potrace algorithm: optimal polygon, vertex adjustment, **corner restoration**, corner detection, then Bezier optimisation. Corner restoration replaces bevelled corners with the true meeting point of the two edges. Stacked mode draws each layer over the union of the layers above it, so there are no gaps. Holes stay attached to their shapes.
+3. **Vectorize.** Each colour becomes a layer. Outlines are fitted with a Rust implementation of the potrace algorithm: optimal polygon, vertex adjustment, **corner restoration**, corner detection, then Bezier optimisation. Corner restoration replaces bevelled corners with the true meeting point of the two edges. In stacked mode the bottom layer covers the whole image and every other layer extends a couple of pixels underneath its neighbours, so there are no gaps and no colour rims where shapes meet. Holes stay attached to their shapes.
 4. **Centerline.** The pipeline runs Zhang–Suen thinning, builds a skeleton graph with merged junctions, prunes spurs, rebuilds corners, then smooths the Bezier strokes. Stroke widths are measured from a distance transform.
 
 The Electron + React app (TypeScript) handles the editor and the Adobe hand-off. It also contains the exporters (SVG/EPS/PDF/AI/DXF/PSD/PNG), all written from scratch with no dependencies.

@@ -282,38 +282,142 @@ pub fn quantize(img: &Rgb, k: u32, merge: f32, locked: &[[u8; 3]], snap_edges: u
         snap_antialiasing(img, &hist, &pts, &mut bin_label, &mut snapped, centers.len(), snap_edges);
     }
     let mut labels = vec![TRANSPARENT; n_px];
-    // [pure pixels, all pixels] per label.
-    let mut sums = vec![[[0u64; 4]; 2]; centers.len()];
+    // Pixels whose label came from edge snapping rather than their own colour.
+    let mut blended = vec![false; n_px];
     for (i, p) in img.px.chunks_exact(3).enumerate() {
-        if !img.opaque[i] {
+        if img.opaque[i] {
+            let b = bin_of(p[0], p[1], p[2]);
+            labels[i] = bin_label[b];
+            blended[i] = snapped[b];
+        }
+    }
+    let palette = match fixed_palette {
+        Some(p) => p,
+        None => {
+            let pal = palette_means(img, &labels, &blended, centers.len());
+            if snap_edges > 0 && pal.len() > 2 {
+                snap_edge_runs(img, &mut labels, &mut blended, &pal, snap_edges);
+                palette_means(img, &labels, &blended, centers.len())
+            } else {
+                pal
+            }
+        }
+    };
+    Quantized { palette, labels }
+}
+
+/// Mean colour per label, from unblended pixels when a label has any.
+fn palette_means(img: &Rgb, labels: &[u8], blended: &[bool], k: usize) -> Vec<[u8; 3]> {
+    // [pure pixels, all pixels] per label.
+    let mut sums = vec![[[0u64; 4]; 2]; k];
+    for (i, p) in img.px.chunks_exact(3).enumerate() {
+        let l = labels[i];
+        if l == TRANSPARENT {
             continue;
         }
-        let b = bin_of(p[0], p[1], p[2]);
-        let l = bin_label[b];
-        labels[i] = l;
-        for s in sums[l as usize].iter_mut().skip(snapped[b] as usize) {
+        for s in sums[l as usize].iter_mut().skip(blended[i] as usize) {
             s[0] += p[0] as u64;
             s[1] += p[1] as u64;
             s[2] += p[2] as u64;
             s[3] += 1;
         }
     }
-    let palette = match fixed_palette {
-        Some(p) => p,
-        None => sums
-            .iter()
-            .map(|both| {
-                let s = if both[0][3] > 0 { both[0] } else { both[1] };
-                if s[3] == 0 {
-                    [0, 0, 0]
-                } else {
-                    let c = s[3] as f64;
-                    [(s[0] as f64 / c).round() as u8, (s[1] as f64 / c).round() as u8, (s[2] as f64 / c).round() as u8]
+    sums.iter()
+        .map(|both| {
+            let s = if both[0][3] > 0 { both[0] } else { both[1] };
+            if s[3] == 0 {
+                [0, 0, 0]
+            } else {
+                let c = s[3] as f64;
+                [(s[0] as f64 / c).round() as u8, (s[1] as f64 / c).round() as u8, (s[2] as f64 / c).round() as u8]
+            }
+        })
+        .collect()
+}
+
+/// Local edge snapping. Soft edges (paintings, photos, blurry JPEGs) are
+/// several pixels wide and get quantized into one or more in-between
+/// colours that are also used elsewhere in the image, so whole-cluster
+/// snapping cannot remove them; they trace as thin rims around shapes.
+/// Here every row and column is scanned for short runs of colours sitting
+/// between two *different* solid colours A and B, whose colours lie on the
+/// A→B ramp. Those pixels are re-assigned to A or B by their own colour,
+/// which moves the boundary to where the edge's midpoint really is. Runs
+/// bounded by the same colour on both sides (thin lines, text) are kept.
+fn snap_edge_runs(img: &Rgb, labels: &mut [u8], blended: &mut [bool], pal: &[[u8; 3]], scale: usize) {
+    let (w, h) = (img.w, img.h);
+    let rgb: Vec<[f32; 3]> = pal.iter().map(|c| [c[0] as f32, c[1] as f32, c[2] as f32]).collect();
+    let max_run = 4 * scale; // one in-between run
+    let max_band = 10 * scale; // all in-between runs together
+    let mut idx: Vec<usize> = Vec::with_capacity(w.max(h));
+    let mut runs: Vec<(u8, usize, usize)> = Vec::new(); // (label, start, len) in idx positions
+    for horizontal in [true, false] {
+        let lines = if horizontal { h } else { w };
+        for line in 0..lines {
+            idx.clear();
+            if horizontal {
+                idx.extend((0..w).map(|x| line * w + x));
+            } else {
+                idx.extend((0..h).map(|y| y * w + line));
+            }
+            runs.clear();
+            let mut start = 0;
+            for k in 1..=idx.len() {
+                if k == idx.len() || labels[idx[k]] != labels[idx[start]] {
+                    runs.push((labels[idx[start]], start, k - start));
+                    start = k;
                 }
-            })
-            .collect(),
-    };
-    Quantized { palette, labels }
+            }
+            // Anchors: long runs. Between two anchors with different labels,
+            // all the short runs form a candidate edge band.
+            let mut prev_anchor: Option<usize> = None;
+            for r in 0..runs.len() {
+                let (lab, _, len) = runs[r];
+                if lab == TRANSPARENT || len <= max_run {
+                    if lab == TRANSPARENT {
+                        prev_anchor = None;
+                    }
+                    continue;
+                }
+                if let Some(pa) = prev_anchor {
+                    let (a, b) = (runs[pa].0, lab);
+                    if r - pa >= 2 && a != b {
+                        let band_start = runs[pa + 1].1;
+                        let band_end = runs[r].1;
+                        if band_end - band_start <= max_band {
+                            let (ca, cb) = (&rgb[a as usize], &rgb[b as usize]);
+                            // Judge each run by its pixels' own mean colour: a
+                            // cluster's palette colour can be far from the
+                            // pixels it captured at an edge.
+                            let between = runs[pa + 1..r].iter().all(|&(c, s0, n)| {
+                                if c == a || c == b {
+                                    return true;
+                                }
+                                let mut m = [0f32; 3];
+                                for &pi in &idx[s0..s0 + n] {
+                                    for ch in 0..3 {
+                                        m[ch] += img.px[pi * 3 + ch] as f32;
+                                    }
+                                }
+                                let m = m.map(|v| v / n as f32);
+                                let (t, d, len) = seg_project(&m, ca, cb);
+                                (-0.05..=1.05).contains(&t) && d <= 10.0 + 0.12 * len
+                            });
+                            if between {
+                                for &pi in &idx[band_start..band_end] {
+                                    let p = &img.px[pi * 3..pi * 3 + 3];
+                                    let (t, _, _) = seg_project(&[p[0] as f32, p[1] as f32, p[2] as f32], ca, cb);
+                                    labels[pi] = if t < 0.5 { a } else { b };
+                                    blended[pi] = true;
+                                }
+                            }
+                        }
+                    }
+                }
+                prev_anchor = Some(r);
+            }
+        }
+    }
 }
 
 /// Removes anti-aliasing colours: clusters that are thin (few pixels with all
